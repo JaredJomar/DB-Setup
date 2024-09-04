@@ -16,6 +16,7 @@ This PowerShell script automates the process of setting up Docker, Dockge, and P
 
 - Windows 10 or later
 - PowerShell 5.1 or later
+- Windows Package Manager (`winget`)
 - Internet connection for downloading Docker Desktop and container images
 
 ## Installation
