@@ -17,28 +17,26 @@ try {
 # Function to install Docker Desktop
 function Install-Docker {
     $dockerDesktop = "Docker Desktop"
+    $dockerPath = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 
     # Check if Docker Desktop is installed
     $installedApps = winget list --name $dockerDesktop
 
     if ($installedApps -like "*$dockerDesktop*") {
         Write-Host "Docker Desktop is installed."
-        # Start Docker Desktop
-        Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
     } else {
         Write-Host "Docker Desktop is not installed. Installing now..."
         # Install Docker Desktop using winget
         $process = Start-Process -FilePath "winget" -ArgumentList "install Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements" -NoNewWindow -PassThru -Wait
-        if ($process.ExitCode -eq 0) {
-            Write-Host "Docker Desktop installation completed successfully."
-        } else {
+        if ($process.ExitCode -ne 0) {
             Write-Host "Docker Desktop installation failed with exit code $($process.ExitCode)."
             return $false
         }
-
-        # Start Docker Desktop after installation
-        Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        Write-Host "Docker Desktop installation completed successfully."
     }
+
+    # Start Docker Desktop
+    Start-Process $dockerPath
 
     # Wait for Docker Desktop to start
     Write-Host "Waiting for Docker Desktop to start..."
@@ -87,18 +85,18 @@ function Install-Dockge {
 # Function to get Postgres details from user
 function Get-PostgresDetails {
     $username = Read-Host "Enter PostgreSQL username (default: postgres)"
-    if (-not $username) {
+    if ([string]::IsNullOrWhiteSpace($username)) {
         $username = "postgres"
-        Write-Host "Using default username: postgres"
     }
+    
     $password = Read-Host "Enter PostgreSQL password" -AsSecureString
     $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
-    $useCustomPort = Read-Host "Do you want to use a custom port? (Y/N)"
-    if ($useCustomPort -eq "Y" -or $useCustomPort -eq "y") {
-        $port = Read-Host "Enter the port for Postgres (default is 5432)"
-    } else {
+    
+    $port = Read-Host "Enter the port for Postgres (default: 5432)"
+    if ([string]::IsNullOrWhiteSpace($port)) {
         $port = 5432
-        Write-Host "Using default port 5432 for Postgres."
+    } else {
+        $port = [int]$port
     }
 
     return @{
@@ -121,7 +119,7 @@ function Print-DockerCompose {
     $composeContent = @"
 version: '3.3'
 services:
-  $instanceName`:
+  postgres:
     container_name: $instanceName
     ports:
       - $($port):5432
@@ -129,7 +127,10 @@ services:
       - POSTGRES_USER=$username
       - POSTGRES_PASSWORD=$password
     image: postgres:latest
-networks: {}
+    volumes:
+      - ${instanceName}_data:/var/lib/postgresql/data
+volumes:
+  ${instanceName}_data:
 "@
 
     Write-Host "Docker Compose configuration for Postgres:" -ForegroundColor Green
@@ -147,12 +148,13 @@ function Install-Postgres {
     try {
         # Generate a unique name for the new Postgres instance
         $instanceName = "postgres_" + (Get-Date).ToString("yyyyMMddHHmmss")
-
+        $volumeName = "${instanceName}_data"
         # Construct the docker run command
         $dockerCommand = "docker run -d --name $instanceName --restart unless-stopped " +
                          "-e POSTGRES_USER=$username " +
                          "-e POSTGRES_PASSWORD=$password " +
                          "-p ${port}:5432 " +
+                         "-v ${volumeName}:/var/lib/postgresql/data " +
                          "postgres:latest"
 
         # Execute the docker run command
@@ -178,15 +180,14 @@ function Show-Menu {
     Write-Host "`nDocker and Postgres Installation Menu:"
     Write-Host "1. Install Docker and Dockge, and display Postgres Compose"
     Write-Host "2. Install Docker and Postgres"
-    Write-Host "3. Install Postgres with default port"
-    Write-Host "4. Install Postgres with specific port"
-    Write-Host "5. Exit"
+    Write-Host "3. Install Postgres"
+    Write-Host "4. Exit"
     Write-Host
 }
 
 do {
     Show-Menu
-    $choice = Read-Host "Select an option (1-5)"
+    $choice = Read-Host "Select an option (1-4)"
 
     switch ($choice) {
         1 {
@@ -207,14 +208,8 @@ do {
         }
         3 {
             if (Get-Command docker -ErrorAction SilentlyContinue) {
-                $username = Read-Host "Enter PostgreSQL username (default: postgres)"
-                if (-not $username) {
-                    $username = "postgres"
-                    Write-Host "Using default username: postgres"
-                }
-                $password = Read-Host "Enter PostgreSQL password" -AsSecureString
-                $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
-                $result = Install-Postgres -username $username -password $password
+                $postgresDetails = Get-PostgresDetails
+                $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password
                 if (-not $result) {
                     Write-Host "Failed to install Postgres. Please check your Docker installation and try again."
                 }
@@ -223,24 +218,6 @@ do {
             }
         }
         4 {
-            if (Get-Command docker -ErrorAction SilentlyContinue) {
-                $port = Read-Host "Enter the port for Postgres"
-                $username = Read-Host "Enter PostgreSQL username (default: postgres)"
-                if (-not $username) {
-                    $username = "postgres"
-                    Write-Host "Using default username: postgres"
-                }
-                $password = Read-Host "Enter PostgreSQL password" -AsSecureString
-                $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
-                $result = Install-Postgres -port $port -username $username -password $password
-                if (-not $result) {
-                    Write-Host "Failed to install Postgres. Please check your Docker installation and try again."
-                }
-            } else {
-                Write-Host "Docker CLI is not installed or not found in PATH."
-            }
-        }
-        5 {
             Write-Host "Exiting..."
             break
         }
@@ -249,7 +226,7 @@ do {
         }
     }
 
-    if ($choice -ne 5) {
+    if ($choice -ne 4) {
         Read-Host "Press Enter to continue..."
     }
-} while ($choice -ne 5)
+} while ($choice -ne 4)
