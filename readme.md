@@ -33,6 +33,8 @@ This PowerShell script automates the process of setting up Docker, Dockge, and P
    iwr -useb https://raw.githubusercontent.com/JaredJomar/DB-Setup/main/DB_Setup.ps1 | iex
    ```
 
+ [here](https://github.com/JaredJomar/DB-Setup/blob/main/Setup.mp4).
+
 ## Usage
 
 1. In PowerShell (running as administrator), navigate to the script's directory.
