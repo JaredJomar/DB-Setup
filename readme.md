@@ -16,17 +16,21 @@ This PowerShell script automates the process of setting up Docker, Dockge, and P
 
 - Windows 10 or later
 - PowerShell 5.1 or later
-- Windows Package Manager (`winget`)
+- Windows Package Manager ([`winget`](command:_github.copilot.openSymbolFromReferences?%5B%22%22%2C%5B%7B%22uri%22%3A%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2Fc%3A%2FUsers%2FJared%2FDocuments%2FGithub%2FCollege%2FDB-Setup%2Freadme.md%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%2C%22pos%22%3A%7B%22line%22%3A18%2C%22character%22%3A28%7D%7D%5D%2C%224248ac77-1e3d-4ddf-9c80-64d232577d4b%22%5D "Go to definition"))
 - Internet connection for downloading Docker Desktop and container images
 
 ## Installation
 
-1. Download the `DB_Setup.ps1` script to your local machine.
+1. Download the [`DB_Setup.ps1`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2Fc%3A%2FUsers%2FJared%2FDocuments%2FGithub%2FCollege%2FDB-Setup%2FDB_Setup.ps1%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%2C%224248ac77-1e3d-4ddf-9c80-64d232577d4b%22%5D "c:\Users\Jared\Documents\Github\College\DB-Setup\DB_Setup.ps1") script to your local machine.
 2. Open PowerShell as an administrator.
 3. Navigate to the directory containing the script.
 4. Run the following command to allow script execution:
    ```powershell
    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+   ```
+5. Alternatively, you can open PowerShell as an administrator and run the script directly from the internet using the following command:
+   ```powershell
+   iwr -useb https://raw.githubusercontent.com/JaredJomar/DB-Setup/main/DB_Setup.ps1 | iex
    ```
 
 ## Usage
@@ -92,4 +96,4 @@ This script is released under the [MIT License](https://choosealicense.com/licen
 
 ## Disclaimer
 
-This script is provided as-is, without any warranties. Always review scripts before running them on your system, especially with elevated privileges. 
+This script is provided as-is, without any warranties. Always review scripts before running them on your system, especially with elevated privileges.
