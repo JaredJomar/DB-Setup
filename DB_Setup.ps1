@@ -99,10 +99,16 @@ function Get-PostgresDetails {
         $port = [int]$port
     }
 
+    $dbname = Read-Host "Enter the database name for Postgres (default: mydatabase)"
+    if ([string]::IsNullOrWhiteSpace($dbname)) {
+        $dbname = "mydatabase"
+    }
+
     return @{
         Username = $username
         Password = $password
         Port = $port
+        DatabaseName = $dbname
     }
 }
 
@@ -111,7 +117,8 @@ function Print-DockerCompose {
     param (
         [string]$username,
         [string]$password,
-        [int]$port
+        [int]$port,
+        [string]$dbname
     )
 
     $instanceName = "postgres_" + (Get-Date).ToString("yyyyMMddHHmmss")
@@ -126,6 +133,7 @@ services:
     environment:
       - POSTGRES_USER=$username
       - POSTGRES_PASSWORD=$password
+      - POSTGRES_DB=$dbname
     image: postgres:latest
     volumes:
       - ${instanceName}_data:/var/lib/postgresql/data
@@ -142,7 +150,8 @@ function Install-Postgres {
     param (
         [int]$port = 5432,
         [string]$username = "postgres",
-        [string]$password
+        [string]$password,
+        [string]$dbname = "mydatabase"
     )
 
     try {
@@ -153,6 +162,7 @@ function Install-Postgres {
         $dockerCommand = "docker run -d --name $instanceName --restart unless-stopped " +
                          "-e POSTGRES_USER=$username " +
                          "-e POSTGRES_PASSWORD=$password " +
+                         "-e POSTGRES_DB=$dbname " +
                          "-p ${port}:5432 " +
                          "-v ${volumeName}:/var/lib/postgresql/data " +
                          "postgres:latest"
@@ -161,7 +171,7 @@ function Install-Postgres {
         $containerId = Invoke-Expression $dockerCommand
 
         if ($containerId) {
-            Write-Host "New Postgres instance '$instanceName' is now running on port $port with username $username."
+            Write-Host "New Postgres instance '$instanceName' is now running on port $port with database name $dbname and username $username."
             return $true
         } else {
             Write-Host "Failed to start new Postgres instance."
@@ -194,13 +204,13 @@ do {
             if (Install-Docker) {
                 Install-Dockge
                 $postgresDetails = Get-PostgresDetails
-                Print-DockerCompose -username $postgresDetails.Username -password $postgresDetails.Password -port $postgresDetails.Port
+                Print-DockerCompose -username $postgresDetails.Username -password $postgresDetails.Password -port $postgresDetails.Port -dbname $postgresDetails.DatabaseName
             }
         }
         2 {
             if (Install-Docker) {
                 $postgresDetails = Get-PostgresDetails
-                $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password
+                $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password -dbname $postgresDetails.DatabaseName
                 if (-not $result) {
                     Write-Host "Failed to install Postgres. Please check your Docker installation and try again."
                 }
@@ -209,7 +219,7 @@ do {
         3 {
             if (Get-Command docker -ErrorAction SilentlyContinue) {
                 $postgresDetails = Get-PostgresDetails
-                $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password
+                $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password -dbname $postgresDetails.DatabaseName
                 if (-not $result) {
                     Write-Host "Failed to install Postgres. Please check your Docker installation and try again."
                 }
