@@ -14,10 +14,11 @@ try {
     Write-Host "Failed to set the execution policy. Error: $_"
 }
 
-# Function to install Docker Desktop
+# Function to install Docker Desktop with progress bar
 function Install-Docker {
     $dockerDesktop = "Docker Desktop"
     $dockerPath = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    $installProgress = 0
 
     # Check if Docker Desktop is installed
     $installedApps = winget list --name $dockerDesktop
@@ -26,8 +27,22 @@ function Install-Docker {
         Write-Host "Docker Desktop is installed."
     } else {
         Write-Host "Docker Desktop is not installed. Installing now..."
-        # Install Docker Desktop using winget
-        $process = Start-Process -FilePath "winget" -ArgumentList "install Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements" -NoNewWindow -PassThru -Wait
+
+        # Create a progress bar
+        $progress = [System.Management.Automation.ProgressRecord]::new(1, "Installing Docker Desktop", "Initialization")
+
+        # Start the installation process and update the progress bar
+        $process = Start-Process -FilePath "winget" -ArgumentList "install Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements" -NoNewWindow -PassThru
+
+        while (-not $process.HasExited) {
+            $installProgress += 5
+            if ($installProgress -gt 100) { $installProgress = 100 }
+            $progress.PercentComplete = $installProgress
+            $progress.StatusDescription = "Installing... $installProgress%"
+            Write-Progress -ProgressRecord $progress
+            Start-Sleep -Seconds 1
+        }
+
         if ($process.ExitCode -ne 0) {
             Write-Host "Docker Desktop installation failed with exit code $($process.ExitCode)."
             return $false
