@@ -14,59 +14,28 @@ try {
     Write-Host "Failed to set the execution policy. Error: $_"
 }
 
-# Function to install Docker Desktop with progress bar
-function Install-Docker {
-    $dockerDesktop = "Docker Desktop"
-    $dockerPath = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    $installProgress = 0
+# Function to show the menu
+function Show-Menu {
+    Write-Host "`nDocker and Postgres Installation Menu:"
+    Write-Host "1. Install Docker and Dockge, and display Postgres Compose"
+    Write-Host "2. Install Docker and Postgres"
+    Write-Host "3. Install Postgres"
+    Write-Host "4. Exit"
+    Write-Host
+}
 
-    # Check if Docker Desktop is installed
+# Function to verify if Docker is installed
+function Is-DockerInstalled {
+    $dockerDesktop = "Docker Desktop"
     $installedApps = winget list --name $dockerDesktop
 
     if ($installedApps -like "*$dockerDesktop*") {
-        Write-Host "Docker Desktop is installed."
+        Write-Host "Docker Desktop is already installed."
+        return $true
     } else {
-        Write-Host "Docker Desktop is not installed. Installing now..."
-
-        # Create a progress bar
-        $progress = [System.Management.Automation.ProgressRecord]::new(1, "Installing Docker Desktop", "Initialization")
-
-        # Start the installation process and update the progress bar
-        $process = Start-Process -FilePath "winget" -ArgumentList "install Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements" -NoNewWindow -PassThru
-
-        while (-not $process.HasExited) {
-            $installProgress += 5
-            if ($installProgress -gt 100) { $installProgress = 100 }
-            $progress.PercentComplete = $installProgress
-            $progress.StatusDescription = "Installing... $installProgress%"
-            Write-Progress -ProgressRecord $progress
-            Start-Sleep -Seconds 1
-        }
-
-        if ($process.ExitCode -ne 0) {
-            Write-Host "Docker Desktop installation failed with exit code $($process.ExitCode)."
-            return $false
-        }
-        Write-Host "Docker Desktop installation completed successfully."
+        Write-Host "Docker Desktop is not installed."
+        return $false
     }
-
-    # Start Docker Desktop
-    Start-Process $dockerPath
-
-    # Wait for Docker Desktop to start
-    Write-Host "Waiting for Docker Desktop to start..."
-    $timeout = 120
-    $timer = [Diagnostics.Stopwatch]::StartNew()
-    while (-not (docker info 2>$null)) {
-        if ($timer.Elapsed.TotalSeconds -gt $timeout) {
-            Write-Host "Timeout waiting for Docker to start. Please start Docker manually and try again."
-            return $false
-        }
-        Start-Sleep -Seconds 5
-    }
-    $timer.Stop()
-    Write-Host "Docker Desktop is ready."
-    return $true
 }
 
 # Function to install Dockge
@@ -200,38 +169,94 @@ function Install-Postgres {
     }
 }
 
-# Main script
-function Show-Menu {
-    Write-Host "`nDocker and Postgres Installation Menu:"
-    Write-Host "1. Install Docker and Dockge, and display Postgres Compose"
-    Write-Host "2. Install Docker and Postgres"
-    Write-Host "3. Install Postgres"
-    Write-Host "4. Exit"
-    Write-Host
+# Function to install Docker Desktop with progress bar
+function Install-Docker {
+    $dockerDesktop = "Docker Desktop"
+    $dockerPath = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    $installProgress = 0
+
+    # Create a progress bar
+    $activity = "Checking or Installing Docker Desktop"
+    $status = "Installing Docker Desktop"
+
+    Write-Host "Docker Desktop is not installed. Installing now..."
+
+    # Start the installation process
+    $process = Start-Process -FilePath "winget" -ArgumentList "install Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements" -NoNewWindow -PassThru
+
+    # Update the progress bar during installation
+    while (-not $process.HasExited) {
+        $installProgress += 5
+        if ($installProgress -gt 100) { $installProgress = 100 }
+        Write-Progress -Activity $activity -Status "Installing Docker" -PercentComplete $installProgress
+        Start-Sleep -Seconds 1
+    }
+
+    if ($process.ExitCode -ne 0) {
+        Write-Host "Docker Desktop installation failed with exit code $($process.ExitCode)."
+        return $false
+    }
+    Write-Host "Docker Desktop installation completed successfully."
+
+    # Start Docker Desktop
+    Start-Process $dockerPath
+
+    # Wait for Docker Desktop to start
+    Write-Host "Waiting for Docker Desktop to start..."
+    $timeout = 120
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    while (-not (docker info 2>$null)) {
+        if ($timer.Elapsed.TotalSeconds -gt $timeout) {
+            Write-Host "Timeout waiting for Docker to start. Please start Docker manually and try again."
+            return $false
+        }
+        Start-Sleep -Seconds 5
+    }
+    $timer.Stop()
+    Write-Host "Docker Desktop is ready."
+    return $true
 }
 
+# Main script logic
 do {
     Show-Menu
     $choice = Read-Host "Select an option (1-4)"
 
     switch ($choice) {
         1 {
-            if (Install-Docker) {
-                Install-Dockge
-                $postgresDetails = Get-PostgresDetails
-                Print-DockerCompose -username $postgresDetails.Username -password $postgresDetails.Password -port $postgresDetails.Port -dbname $postgresDetails.DatabaseName
+            # First, check if Docker is installed
+            if (-not (Is-DockerInstalled)) {
+                # If Docker is not installed, install it
+                if (-not (Install-Docker)) {
+                    Write-Host "Failed to install Docker. Exiting..."
+                    break
+                }
             }
+
+            # Now install Dockge and Postgres Compose configuration
+            Install-Dockge
+            $postgresDetails = Get-PostgresDetails
+            Print-DockerCompose -username $postgresDetails.Username -password $postgresDetails.Password -port $postgresDetails.Port -dbname $postgresDetails.DatabaseName
         }
         2 {
-            if (Install-Docker) {
-                $postgresDetails = Get-PostgresDetails
-                $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password -dbname $postgresDetails.DatabaseName
-                if (-not $result) {
-                    Write-Host "Failed to install Postgres. Please check your Docker installation and try again."
+            # First, check if Docker is installed
+            if (-not (Is-DockerInstalled)) {
+                # If Docker is not installed, install it
+                if (-not (Install-Docker)) {
+                    Write-Host "Failed to install Docker. Exiting..."
+                    break
                 }
+            }
+
+            # Now install Postgres
+            $postgresDetails = Get-PostgresDetails
+            $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password -dbname $postgresDetails.DatabaseName
+            if (-not $result) {
+                Write-Host "Failed to install Postgres. Please check your Docker installation and try again."
             }
         }
         3 {
+            # Just install Postgres
             if (Get-Command docker -ErrorAction SilentlyContinue) {
                 $postgresDetails = Get-PostgresDetails
                 $result = Install-Postgres -port $postgresDetails.Port -username $postgresDetails.Username -password $postgresDetails.Password -dbname $postgresDetails.DatabaseName
