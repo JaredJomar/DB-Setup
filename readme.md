@@ -9,6 +9,7 @@ This PowerShell script automates the process of setting up Docker, Dockge, and P
 - Automatic installation of Docker Desktop (if not already installed)
 - Installation and configuration of Dockge for Docker container management
 - Installation of PostgreSQL as a Docker container
+- Optional installation of PostgreSQL with pgvector support
 - Generation of Docker Compose configurations for PostgreSQL
 - Interactive menu for easy navigation and selection of installation options
 
@@ -60,7 +61,13 @@ This PowerShell script automates the process of setting up Docker, Dockge, and P
    - Prompts for PostgreSQL configuration details
    - Installs PostgreSQL as a Docker container
 
-4. **Exit**
+4. **Install Postgres with pgvector**
+   - Checks if Docker is installed
+   - Creates a custom PostgreSQL image with pgvector extension
+   - Installs and configures PostgreSQL with pgvector support
+   - Automatically enables the vector extension
+
+5. **Exit**
    - Exits the script
 
 ## Configuration Options
@@ -70,6 +77,19 @@ When installing PostgreSQL, you'll be prompted for the following information:
 - PostgreSQL username (default: postgres)
 - PostgreSQL password
 - Custom port (optional, default: 5432)
+- Database name (optional, default: mydatabase)
+
+## Using pgvector
+
+The pgvector extension allows you to:
+- Store vector embeddings in your PostgreSQL database
+- Perform similarity searches
+- Work with AI and machine learning applications
+
+When using option 4, the script will:
+1. Build a custom PostgreSQL image with pgvector
+2. Create a new container with the extension enabled
+3. Automatically configure the vector extension
 
 ## Docker Compose Configuration
 
