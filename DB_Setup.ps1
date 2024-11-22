@@ -20,7 +20,8 @@ function Show-Menu {
     Write-Host "1. Install Docker and Dockge, and display Postgres Compose"
     Write-Host "2. Install Docker and Postgres"
     Write-Host "3. Install Postgres"
-    Write-Host "4. Exit"
+    Write-Host "4. Install postgres with pgvector"
+    Write-Host "5. Exit"
     Write-Host
 }
 
@@ -217,10 +218,82 @@ function Install-Docker {
     return $true
 }
 
+# Function to install pgvector
+function Install-PgVector {
+    try {
+        # Get database details
+        $postgresDetails = Get-PostgresDetails
+        
+        # Create a Dockerfile for custom postgres image with pgvector
+        $tempDir = New-Item -ItemType Directory -Path "$env:TEMP\pg-vector-setup" -Force
+        $dockerfilePath = Join-Path $tempDir "Dockerfile"
+        
+        @"
+FROM postgres:latest
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    git \
+    postgresql-server-dev-all \
+    gcc \
+    make && \
+    cd /tmp && \
+    git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git && \
+    cd pgvector && \
+    make clean && \
+    make OPTFLAGS="" && \
+    make install && \
+    echo "shared_preload_libraries = 'vector'" >> /usr/share/postgresql/postgresql.conf.sample
+"@ | Set-Content $dockerfilePath
+
+        # Build custom image
+        $imageName = "postgres-pgvector:latest"
+        Write-Host "Building custom Postgres image with pgvector..."
+        docker build -t $imageName $tempDir
+
+        # Run new container with custom image
+        $instanceName = "postgres-vector_" + (Get-Date).ToString("yyyyMMddHHmmss")
+        $volumeName = "${instanceName}_data"
+        
+        $dockerCommand = "docker run -d --name $instanceName --restart unless-stopped " +
+                        "-e POSTGRES_USER=$($postgresDetails.Username) " +
+                        "-e POSTGRES_PASSWORD=$($postgresDetails.Password) " +
+                        "-e POSTGRES_DB=$($postgresDetails.DatabaseName) " +
+                        "-p $($postgresDetails.Port):5432 " +
+                        "-v ${volumeName}:/var/lib/postgresql/data " +
+                        "$imageName"
+
+        $containerId = Invoke-Expression $dockerCommand
+
+        if ($containerId) {
+            Write-Host "Waiting for database to be ready..."
+            Start-Sleep -Seconds 10
+
+            # Create extension
+            docker exec $instanceName psql -U $($postgresDetails.Username) -d $($postgresDetails.DatabaseName) -c "CREATE EXTENSION vector;"
+            
+            Write-Host "New Postgres instance with pgvector '$instanceName' is now running on port $($postgresDetails.Port)" -ForegroundColor Green
+            Write-Host "Database: $($postgresDetails.DatabaseName), Username: $($postgresDetails.Username)" -ForegroundColor Green
+            return $true
+        }
+        
+        return $false
+    }
+    catch {
+        Write-Host "Error installing Postgres with pgvector: $_" -ForegroundColor Red
+        return $false
+    }
+    finally {
+        if ($tempDir -and (Test-Path $tempDir)) {
+            Remove-Item -Path $tempDir -Recurse -Force
+        }
+    }
+}
+
 # Main script logic
 do {
     Show-Menu
-    $choice = Read-Host "Select an option (1-4)"
+    $choice = Read-Host "Select an option (1-5)"
 
     switch ($choice) {
         1 {
@@ -268,6 +341,17 @@ do {
             }
         }
         4 {
+            # Install new Postgres with pgvector
+            if (Get-Command docker -ErrorAction SilentlyContinue) {
+                $result = Install-PgVector
+                if (-not $result) {
+                    Write-Host "Failed to install Postgres with pgvector. Please check your Docker installation and try again."
+                }
+            } else {
+                Write-Host "Docker CLI is not installed or not found in PATH."
+            }
+        }
+        5 {
             Write-Host "Exiting..."
             break
         }
@@ -276,7 +360,7 @@ do {
         }
     }
 
-    if ($choice -ne 4) {
+    if ($choice -ne 5) {
         Read-Host "Press Enter to continue..."
     }
-} while ($choice -ne 4)
+} while ($choice -ne 5)
