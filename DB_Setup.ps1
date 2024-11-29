@@ -41,12 +41,14 @@ function Is-DockerInstalled {
 
 # Function to install Dockge
 function Install-Dockge {
+    Write-Host "Starting Dockge installation..."
     # Create necessary folders in the user's Documents path
     $documentsPath = "$env:USERPROFILE\Documents\Docker Stuff\Dockge"
     $dataPath = "$documentsPath\data"
     $stacksPath = "$documentsPath\stacks"
 
     New-Item -ItemType Directory -Path $dataPath, $stacksPath -Force
+    Write-Host "Created necessary folders for Dockge."
 
     # Check if Dockge container already exists
     $existingContainer = docker ps -a --filter "name=dockge" --format "{{.Names}}"
@@ -54,6 +56,7 @@ function Install-Dockge {
         Write-Host "Dockge container already exists. Starting it if not running..."
         docker start dockge
     } else {
+        Write-Host "Running Dockge container..."
         # Run the specified Docker container
         docker run -d --name dockge --restart unless-stopped `
             -p 5001:5001 `
@@ -218,13 +221,39 @@ function Install-Docker {
     return $true
 }
 
+# Function to show Docker progress
+function Show-DockerProgress {
+    param (
+        [string]$containerId,
+        [string]$action
+    )
+    
+    $progress = 0
+    while ($progress -lt 100) {
+        $status = docker inspect $containerId 2>$null
+        if ($?) {
+            $state = (docker inspect $containerId | ConvertFrom-Json).State
+            if ($state.Status -eq "running") {
+                $progress = 100
+            } else {
+                $progress += 10
+            }
+        } else {
+            $progress += 5
+        }
+        Write-Progress -Activity "Docker Container Status" -Status "$action" -PercentComplete $progress
+        Start-Sleep -Milliseconds 500
+    }
+    Write-Progress -Activity "Docker Container Status" -Completed
+}
+
 # Function to install pgvector
 function Install-PgVector {
     try {
-        # Get database details
+        Write-Host "Starting installation of Postgres with pgvector..."
         $postgresDetails = Get-PostgresDetails
         
-        # Create a Dockerfile for custom postgres image with pgvector
+        # Create Dockerfile
         $tempDir = New-Item -ItemType Directory -Path "$env:TEMP\pg-vector-setup" -Force
         $dockerfilePath = Join-Path $tempDir "Dockerfile"
         
@@ -246,12 +275,23 @@ RUN apt-get update && \
     echo "shared_preload_libraries = 'vector'" >> /usr/share/postgresql/postgresql.conf.sample
 "@ | Set-Content $dockerfilePath
 
-        # Build custom image
+        Write-Host "Building custom Postgres image with pgvector..."
+        # Build custom image with progress
         $imageName = "postgres-pgvector:latest"
         Write-Host "Building custom Postgres image with pgvector..."
-        docker build -t $imageName $tempDir
+        $buildProgress = 0
+        $buildProcess = Start-Process -FilePath "docker" -ArgumentList "build -t $imageName $tempDir" -NoNewWindow -PassThru
+        
+        while (-not $buildProcess.HasExited) {
+            $buildProgress += 2
+            if ($buildProgress -gt 98) { $buildProgress = 98 }
+            Write-Progress -Activity "Building Docker Image" -Status "Building postgres-pgvector image..." -PercentComplete $buildProgress
+            Start-Sleep -Milliseconds 500
+        }
+        Write-Progress -Activity "Building Docker Image" -Completed
 
-        # Run new container with custom image
+        # Run container with progress tracking
+        Write-Host "Running new container with custom image..."
         $instanceName = "postgres-vector_" + (Get-Date).ToString("yyyyMMddHHmmss")
         $volumeName = "${instanceName}_data"
         
@@ -266,10 +306,24 @@ RUN apt-get update && \
         $containerId = Invoke-Expression $dockerCommand
 
         if ($containerId) {
+            Show-DockerProgress -containerId $instanceName -action "Starting Postgres container"
+            
             Write-Host "Waiting for database to be ready..."
-            Start-Sleep -Seconds 10
+            $dbProgress = 0
+            while ($dbProgress -lt 100) {
+                Write-Progress -Activity "Database Initialization" -Status "Waiting for database to be ready..." -PercentComplete $dbProgress
+                $result = docker exec $instanceName pg_isready 2>$null
+                if ($?) {
+                    $dbProgress = 100
+                } else {
+                    $dbProgress += 10
+                    Start-Sleep -Seconds 1
+                }
+            }
+            Write-Progress -Activity "Database Initialization" -Completed
 
             # Create extension
+            Write-Host "Creating pgvector extension..."
             docker exec $instanceName psql -U $($postgresDetails.Username) -d $($postgresDetails.DatabaseName) -c "CREATE EXTENSION vector;"
             
             Write-Host "New Postgres instance with pgvector '$instanceName' is now running on port $($postgresDetails.Port)" -ForegroundColor Green
